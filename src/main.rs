@@ -1,11 +1,11 @@
-use std::io::Read;
+use std::{io::Read, path::Path};
 
 use flate2::read::ZlibDecoder;
 
 const DELTA: u32 = 0x9e3779b9;
 
 // now what was that stupid macro?
-fn mx(y: u32, z: u32, sum: u32, key: &[u32], p: usize, e: usize) -> u32 {
+fn mx(y: u32, z: u32, sum: u32, key: &[u32], p: u32, e: u32) -> u32 {
     ((z >> 5 ^ y << 2) + (y >> 3 ^ z << 4)) ^ ((sum ^ y) + (key[((p & 3) ^ e) as usize] ^ z))
 }
 
@@ -17,37 +17,42 @@ fn bdecrypt(buffer: &mut [u8], len: isize, k: u64) {
         0xB00BEEEF,
     ];
     let (mut y, mut z, mut sum): (u32, u32, u32);
-    // v should be basically the pointer to the buffer
-    // let v: &mut [u32] = &mut [1, 2, 3]; //  uint32_t *v = (uint32_t *) buffer;
-    // what does the type transform from uint8_t to uint32_t and how to do it in rust
-    let v = buffer;
+    let (mut p, rounds, mut e): (u32, u32, u32);
 
-    let (mut p, rounds, mut e): (usize, usize, usize);
-    let n = (len - len % 4) / 4;
+    // CONVERT &mut [u8] TO &mut [u32]
+    // let v: &mut [u32] = &mut [1, 2, 3]; //  uint32_t *v = (uint32_t *) buffer;
+    // yeah, we must treat the buffer as &mut [u32] and if there are some dangling bytes just skip it
+    // let v = buffer;
+    let (prefix, v, suffix): (&mut [u8], &mut [u32], &mut [u8]);
+    unsafe {
+        let (prefix, v, suffix) = buffer.align_to_mut::<u32>();
+    }
+    if prefix.len() != 0 {
+        panic!("align_to_mut is not exactly what we need then");
+    }
+
+    // VERIFY PRECONDITIONS
+    let n = v.len() as u32; // let n = (len - len % 4) / 4; lua scripts just aren't u64 big anyway
     if n < 2 {
         return;
     }
-    let mut rounds = (6 + 52 / n) as u32;
+    // WORKING ALGORITHM
+    let mut rounds = 6 + 52 / n;
 
     sum = rounds * DELTA;
-    // TODO read and access more than u8 from the buffer
-    y = v[0..4];
+    y = v[0];
     loop {
-        e = ((sum >> 2) & 3) as usize;
-        p = n as usize - 1;
-        while p > 0 {
+        e = (sum >> 2) & 3;
+        for p in (1..n).rev() {
             z = v[n as usize - 1];
-            // y = v[0] -= mx(y, z, sum, key, p, e);
             v[0] -= mx(y, z, sum, key, p, e);
             y = v[0];
-            p -= 1;
         }
         z = v[n as usize - 1];
-        // this should be how c++ executes it in order
-        // y = (v[0] -= mx(y, z, sum, key, p, e));
-        v[0] -= mx(y, z, sum, key, p, e);
+        v[0] -= mx(y, z, sum, key, 0, e);
         y = v[0];
         sum -= DELTA;
+
         if rounds == 0 {
             break;
         }
@@ -55,7 +60,7 @@ fn bdecrypt(buffer: &mut [u8], len: isize, k: u64) {
     }
 }
 
-fn decryptBuffer(buffer: &[u8]) -> bool {
+fn decryptBuffer(buffer: &mut [u8]) -> bool {
     if buffer.len() < 5 {
         return true;
     }
@@ -63,11 +68,11 @@ fn decryptBuffer(buffer: &[u8]) -> bool {
         // will this comparison work?
         return false;
     }
-    // should it be be or le bytes?
-    let key: u64 = u64::from_be_bytes(buffer[4..12].try_into().unwrap());
-    let compressed_size = u32::from_be_bytes(buffer[12..16].try_into().unwrap());
-    let size = u32::from_be_bytes(buffer[16..20].try_into().unwrap());
-    let adler = u32::from_be_bytes(buffer[20..24].try_into().unwrap());
+    // x86 is little endian so le, arm too
+    let key: u64 = u64::from_le_bytes(buffer[4..12].try_into().unwrap());
+    let compressed_size = u32::from_le_bytes(buffer[12..16].try_into().unwrap());
+    let size = u32::from_le_bytes(buffer[16..20].try_into().unwrap());
+    let adler = u32::from_le_bytes(buffer[20..24].try_into().unwrap());
     if (compressed_size as usize) < buffer.len() - 24 {
         return false;
     }
@@ -83,11 +88,14 @@ fn decryptBuffer(buffer: &[u8]) -> bool {
 }
 
 // this should go through all the files in the directory, copy unencrypted and write decrypted
-// to the new outputDirectory so that we get perffect unencrypted mirror
-fn createFS() {}
+// to the new outputDirectory so that we get perfect unencrypted mirror
+fn createFS(input_path: &Path) {
+    // TODO start here next time
+}
 
 fn main() {
-    println!("Hello, world!");
+    let input_path = Path::new("./test");
+    createFS(input_path);
 }
 
 #[cfg(test)]
