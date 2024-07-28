@@ -3,6 +3,7 @@
 #include <iostream>
 #include <fstream>
 #include <sstream>
+#include <cstdint>
 
 #define DELTA 0x9e3779b9
 // that is also a fun part
@@ -30,18 +31,27 @@ void bdecrypt(uint8_t *buffer, int len, uint64_t k)
 
     sum = rounds * DELTA;
     y = v[0];
+    std::cout << "initial values y: " << y << ", sum: " << sum << " ,round: " << rounds << std::endl;
     do
     {
+        std::cout << "starting round: " << rounds << ",-------------------- sum: " << sum << std::endl;
         e = (sum >> 2) & 3;
         for (p = n - 1; p > 0; p--) // we scramble all accessible uint32's in each round
         {
             z = v[p - 1];
-            y = v[p] -= MX; // here we assign v[p] a value
+            auto pmxresult = MX;
+            printf("y: %u z:%u sum:%u key:%u,%u,%u,%u p: %u e: %u\n", y, z, sum, key[0], key[1], key[2], key[3], p, e);
+            std::cout << "pmxresult: " << p << ":" << pmxresult << ", ";
+            return;
+            y = v[p] -= pmxresult; // here we assign v[p] a value
         }
+        std::cout << "\nafter inner loop z: " << z << " , y: " << y << " ,e: " << e << std::endl;
         z = v[n - 1]; // constantly assign a value from the same index
         // -= & = is right associative so v[0] = v[0] - MX; y = v[0];
-        y = v[0] -= MX; // for each round we also change v[0] constantly, strange
-        sum -= DELTA;   // all we do to sum, drop the constant down to zero in the last round
+        auto mxresult = MX;
+        y = v[0] -= mxresult; // for each round we also change v[0] constantly, strange
+        sum -= DELTA;         // all we do to sum, drop the constant down to zero in the last round
+        std::cout << "mx_result: " << mxresult << " ,v[0] after sub: " << v[0] << " ,y, e, z:" << y << e << z << std::endl;
     } while (--rounds);
 }
 
@@ -75,6 +85,16 @@ bool decryptBuffer(std::string &buffer)
         return false;
     }
 
+    auto test2 = buffer.data();
+    std::cout << test2 << ";" << std::endl;
+    std::cout << "buffer with header b4 scrabmle= [";
+    for (int i = 0; i < compressed_size; i++)
+    {
+        printf("%u", (unsigned char)test2[i]);
+        std::cout << ", ";
+    }
+    std::cout << "]" << std::endl;
+
     // BDECRYPT
     bdecrypt((uint8_t *)&buffer[24], compressed_size, key);
     // this basically descrambles the bytes of the buffer it seems to retrieve zlib compressed values
@@ -82,13 +102,33 @@ bool decryptBuffer(std::string &buffer)
     // create new buffer of size stored in metadata
     std::string new_buffer;
     new_buffer.resize(size);
+    std::cout << "huj1" << std::endl;
+    std::ofstream file;
+    file.open("./descrambled-buffer.raw", std::ios_base::binary);
+    // assert(file.is_open());
+    auto test = buffer.data();
+    file.write(test, size);
+    // auto testbyte = (const byte *)buffer;
+
+    std::cout << buffer << ";" << std::endl;
+    auto test3 = buffer.data();
+    // std::cout << test3 << ";" << std::endl;
+    std::cout << "buffer w header after scramble c++= [";
+    for (int i = 0; i < compressed_size; i++)
+    {
+        printf("%u", (unsigned char)test3[i]);
+        std::cout << ", ";
+    }
+    std::cout << "]";
+    // std::cout << (uint8_t *)&buffer[24] << std::endl;
+    // std::cout << (uint8_t *)&buffer[24] << std::endl;
+    std::cout << "huj2" << std::endl;
     // why not just use original "size" var tho?
     unsigned long new_buffer_size = new_buffer.size();
     if (
         uncompress(
-            (uint8_t *)new_buffer.data(),
-            &new_buffer_size, (uint8_t *)&buffer[24],
-            compressed_size) != Z_OK, )
+            (uint8_t *)new_buffer.data(), &new_buffer_size,
+            (uint8_t *)&buffer[24], compressed_size) != Z_OK)
     {
         return false;
     }
@@ -100,9 +140,10 @@ bool decryptBuffer(std::string &buffer)
 
 int main()
 {
+    std::cout << "hello" << std::endl;
     std::string data("");
 
-    std::ifstream t("/bin/init.lua");
+    std::ifstream t("./init.lua");
     std::stringstream buffer;
     buffer << t.rdbuf();
     data = buffer.str();

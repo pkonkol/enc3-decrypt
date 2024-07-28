@@ -1,4 +1,9 @@
-use std::{fs, io::Read, num::Wrapping, path::Path};
+use std::{
+    fs,
+    io::{self, ErrorKind, Read},
+    num::Wrapping,
+    path::Path,
+};
 
 use flate2::read::ZlibDecoder;
 
@@ -43,32 +48,57 @@ fn bdecrypt(buffer: &mut [u8], len: isize, k: u64) {
     };
 
     // VERIFY PRECONDITIONS
+    let header_n = (len - len % 4) / 4;
     let n = v.len() as u32; // let n = (len - len % 4) / 4; lua scripts just aren't u64 big anyway
+    if header_n != n as isize {
+        println!("n from the header: {header_n}, actual buffer n: {n}");
+    }
     if n < 2 {
         return;
     }
     // WORKING ALGORITHM
+    // TODO debug what is wrong here and why the values turn out different
     rounds = Wrapping(6 + 52 / n);
 
     sum = rounds * Wrapping(DELTA);
     // (sum, _) = rounds.overflowing_mul(DELTA);
+
+    z = Wrapping(0); // tmp so i can print it
     y = Wrapping(v[0]);
+    println!(
+        "initial values: y: {}, sum: {}, rounds: {}",
+        y.0, sum.0, rounds.0
+    );
     loop {
+        println!("round {rounds} start------------------, sum: {sum},");
         e = (sum >> 2) & Wrapping(3);
         for p in (1..n).rev().map(|i| Wrapping(i)) {
-            z = Wrapping(v[n as usize - 1]);
-            v[0] = v[0].wrapping_sub(mx(y, z, sum, key, p, e).0);
-            y = Wrapping(v[0]);
+            z = Wrapping(v[p.0 as usize - 1]);
+            // println!(
+            //     "y:{} z:{} sum:{} key:{:?} p:{} e:{}",
+            //     y.0, z.0, sum.0, key, p.0, e.0
+            // );
+            let pmxresult = mx(y, z, sum, key, p, e).0;
+            // print!("{}:{pmxresult}, ", p.0);
+            // panic!();
+            v[p.0 as usize] = v[p.0 as usize].wrapping_sub(pmxresult);
+            y = Wrapping(v[p.0 as usize]);
         }
+        println!("\nafter the inner loop z: {} y: {} e: {}", z.0, y.0, e.0);
         z = Wrapping(v[n as usize - 1]);
-        v[0] = v[0].wrapping_sub(mx(y, z, sum, key, Wrapping(0), e).0);
+        let mx_result = mx(y, z, sum, key, Wrapping(0), e).0;
+        v[0] = v[0].wrapping_sub(mx_result);
         y = Wrapping(v[0]);
         sum -= DELTA;
 
+        println!(
+            "mx_result: {mx_result}, v[0] after sub: {}, y: {}, e: {}, z: {}",
+            v[0], y.0, e.0, z.0
+        );
+        rounds -= 1;
         if rounds.0 == 0 {
             break;
         }
-        rounds -= 1;
     }
 }
 
@@ -97,7 +127,11 @@ fn decrypt_buffer(buffer: &mut [u8]) -> Option<String> {
     if (compressed_size as usize) != buffer.len() - 24 {
         return None;
     }
-    bdecrypt(buffer, compressed_size as isize, key);
+    println!("buffer with header b4 scramble=\n{:?}", buffer);
+
+    bdecrypt(&mut buffer[24..], compressed_size as isize, key);
+
+    println!("buffer with header af scramble=\n{:?}", buffer);
 
     let mut z = ZlibDecoder::new(&buffer[24..]);
     let mut s = String::new();
@@ -109,12 +143,21 @@ fn decrypt_buffer(buffer: &mut [u8]) -> Option<String> {
 // this should go through all the files in the directory, copy unencrypted and write decrypted
 // to the new outputDirectory so that we get perfect unencrypted mirror
 fn scan_dir(input_path: &Path, output_path: &Path) -> anyhow::Result<()> {
+    println!("scanning dirs");
     // CREATE EMPTY OUTPUT DIRECTORY
-    fs::create_dir(output_path)?;
+    if let Err(e) = fs::create_dir(output_path) {
+        match e.kind() {
+            ErrorKind::AlreadyExists => {
+                println!("dir already exists");
+            }
+            _ => return Err(e.into()),
+        }
+    }
 
     // READ THE INPUT DIRECTORY
     let res = fs::read_dir(input_path)?;
     for f in res {
+        println!("dir entry result: {:?}", f);
         if let Ok(entry) = f {
             if let Ok(ft) = entry.file_type() {
                 if ft.is_file() {

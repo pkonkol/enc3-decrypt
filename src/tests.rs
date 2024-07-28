@@ -8,7 +8,22 @@ fn test_test() {
 
 static input: &'static [u8] = &[];
 
-const output: &str = r##"-- CONFIG
+const descrambled_buffer: &str = r##"ENC3f޾y
+       5xVoH)F"l)88,򣽪baUv״C4I}f.}Ο/'pXc7}24ǐX V9RA*\,!
+XA.
+A*cYW3!^p,-]MVqrDF&-vXzo&owt2P(9""s#{H)+~2
+                                          ^LmP4+\mDʏ ;0}ʘJ'''*`$EfTlivd7mEr:iPQc҆m_bzu JX@ks-sc  ӁՙTKS^ ۦ*j2
+TQ%t*x;F)Xz$(N~&?Hpq
+                    d4LF$x!*cxi/4Ld6~:ǨSpP+ SX0,%6
+24ퟓkrm<o9|ΐ=h:Iw0e&̅xZZ%GK                         zfrM=9+esMw
+^ ڒ8ZQGo?                qA     *c1^^ײ  S#vfN+"'5\4dayZf5_;t't_I2\j*$net䖱~j45^!S<W;<{" O9;c<hkMv<hsp'J!;?[H:k8S8Hh3&Q5'(:ؚAxK]+vh˳OXy]ՈUL       ,aC
+hd+j#Qxo(h,(çGuϸmݐɠG<d|#a#rAfl,н
+
+                     9Ky
+EX/Ϻ5WJF,>MQ<<NϜc腏38:D8ϢitڻGJGRqz`7x{E8;`ٱ/_ӬvHsyvT]^a]k*F2GT?`ȤAt]-쭒kbCI7/Ͷ#_UkU]&J|XtS~y
+"##;
+
+const fully_decrypted: &str = r##"-- CONFIG
 APP_NAME = "Askara_v4"  -- important, change it, it's name for config dir and files in appdata
 APP_VERSION = 1343       -- client version for updater and login to identify outdated client
 DEFAULT_LAYOUT = "retro" -- on android it's forced to "mobile", check code bellow
